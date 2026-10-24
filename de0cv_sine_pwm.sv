@@ -1,9 +1,9 @@
-// Repeating musical scale for the Terasic Pmod AUDIO v1.2 on a DE0-CV board.
+// Repeating musical scale for the Pmod AUDIO v1.2 on a DE0-CV board.
 //
-// The Pmod holds a PAM8403 class-D amplifier. Its input is an analog level,
-// so this design drives it with a pulse-width modulated square wave. The
-// amplifier does not pass the switching rate, so the speaker receives the
-// average level of each PWM period.
+// The Pmod holds a PAM8403 class-D amplifier. Its input is an analog level, so
+// this design drives it with a pulse-width modulated square wave. The
+// amplifier removes the switching rate, and the speaker receives the average
+// level of each PWM period.
 //
 // Signal path:
 //
@@ -18,32 +18,15 @@
 //                                                                  v
 //                                                    PIN_T17 and PIN_T15
 //
-// The design plays a rising scale of fifteen notes, from C4 to C6, and then
-// starts again at C4. Note k of the table holds the switch value that gives
-// that note, so the note frequency is NOTE_SW[k] times 2.98023 Hz.
+// Note k of NOTE_SW holds the switch value that gives note k. The design plays
+// a rising scale of fifteen notes, from C4 to C6, and then starts again at C4.
+// The switches set the tempo, and a higher switch value plays faster.
 //
-// One PWM period is 2**8 = 256 clock cycles, so the carrier is 195.3 kHz and
-// one sine sample is taken per period. The sample rate is therefore 195312.5
-// Hz. The increment is the note value shifted left by 8, so the tone is:
-//
-//   f = note * 256 * 195312.5 / 2**24 = note * 2.98023 Hz
-//
-// The switches set the tempo. The note length in PWM periods is:
-//
-//   length = 8192 + ((1023 - SW) << 7)
-//
-//   SW = 0      0.71 s for each note
-//   SW = 1023   0.04 s for each note
-//
-// A higher switch value plays faster.
-//
-// VOLUME runs from 0 to 15 and starts at 1. KEY0 raises it and KEY1 lowers
-// it. HEX0 shows the level as a hexadecimal digit.
-//
-// The volume scales the sample by VOLUME/16, so level 15 is close to full
-// scale and level 1 is quiet. A full-scale sine clips at the amplifier, and
-// the clipped signal heats the voice coil. The design starts at 1 so that a
-// board which powers up cannot surprise the ears of a headphone wearer.
+// VOLUME runs from 0 to 15 and starts at 1. The volume scales the sample by
+// VOLUME/16. KEY0 raises the level and KEY1 lowers it, and HEX0 shows it. A
+// full-scale sine clips at the amplifier, and the clipped signal heats the
+// voice coil. The design starts at 1 so that a board which powers up cannot
+// surprise the ears of a headphone wearer.
 //
 // The two audio lanes reach the FPGA on these pins:
 //
@@ -52,7 +35,9 @@
 //
 // These two pins were found by measurement on the board, not from the
 // schematic. The RFS header mirrors each row against the DE0-CV header, so a
-// net name in the RFS schematic does not give the GPIO lane by itself.
+// net name in the RFS schematic does not give the GPIO lane by itself. Both
+// lanes are driven together, because a class-D amplifier with one input
+// floating gives no sound.
 //
 // LEDR[3:0] show the note index. LEDR[9] blinks once in 0.67 s from a clocked
 // counter, so it shows that the clock reaches the logic.
