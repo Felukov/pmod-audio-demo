@@ -1,7 +1,7 @@
 // Measures the tone that the design produces.
 //
 // The design outputs a pulse-width modulated square wave. One PWM period is
-// 1024 clock cycles. This bench counts the high cycles inside each period,
+// 256 clock cycles. This bench counts the high cycles inside each period,
 // which gives the duty that the amplifier receives as an average level.
 // The duty sequence is the sine. The bench then finds where the duty crosses
 // its mid value, which gives one tone period in clock cycles.
@@ -25,8 +25,15 @@ int main(int argc, char **argv) {
     dut->CLOCK_50 = 0;
     dut->SW = switchValue;
 
-    // One PWM period is 1024 clock cycles.
-    const int kPeriod = 1024;
+    // Both keys are released, which reads high on this board.
+    dut->KEY = 0xF;
+
+    // The bench looks for the duty crossing its mid value. The design starts
+    // at volume 8 of 16, so the peak duty is half of full scale.
+    const int kMid = 64;
+
+    // One PWM period is 256 clock cycles.
+    const int kPeriod = 256;
 
     int      high    = 0;
     int      inPwm   = 0;
@@ -53,7 +60,7 @@ int main(int argc, char **argv) {
 
         if (inPwm == kPeriod) {
             // The duty of the period that just ended is the sine sample.
-            if (prevDuty >= 0 && prevDuty < 128 && high >= 128 && prevDuty >= 0) {
+            if (prevDuty >= 0 && prevDuty < kMid && high >= kMid) {
                 // An upward crossing of the mid value starts one tone period.
                 ++crossings;
                 if (firstCross < 0) {

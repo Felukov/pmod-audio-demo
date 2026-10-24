@@ -6,29 +6,30 @@ The design is one SystemVerilog file.
 
 ## What the design does
 
-The switches choose the tone frequency. A pulse-width modulator drives the
-amplifier input. The amplifier removes the switching rate and reproduces the
-average level. That average level follows a 64-entry sine table.
+The switches choose the tone frequency. KEY0 and KEY1 choose the volume.
+A pulse-width modulator drives the amplifier input. The amplifier removes the
+switching rate and reproduces the average level. That average level follows a
+256-entry sine table.
 
 ```
-SW[9:0] --> phase increment --> 24-bit phase --> sine table (64 entries)
+SW[9:0] --> phase increment --> 24-bit phase --> sine table (256 entries)
                                                      |
                                                      v
-                                               8-bit sample
+                                      8-bit sample, scaled by VOLUME
                                                      |
                                                      v
-                                 PWM against a 10-bit counter
+                                 PWM against an 8-bit counter
                                                      |
                                                      v
                                       PIN_T17 (left), PIN_T15 (right)
 ```
 
-One PWM period is 1024 clock cycles, so the PWM rate is 48.83 kHz.
-One sine sample is taken per period, so the sample rate is 48828.125 Hz.
+One PWM period is 256 clock cycles, so the carrier is 195.3 kHz.
+One sine sample is taken per period, so the sample rate is 195312.5 Hz.
 The tone frequency is:
 
 ```
-f = SW * 1024 * 48828.125 / 2**24 = SW * 2.98023 Hz
+f = SW * 256 * 195312.5 / 2**24 = SW * 2.98023 Hz
 ```
 
 | SW | tone |
@@ -39,8 +40,33 @@ f = SW * 1024 * 48828.125 / 2**24 = SW * 2.98023 Hz
 | 400 | 1192 Hz |
 | 1023 | 3049 Hz |
 
+The reason for the fast carrier: the Pmod input network is a coupling
+capacitor into 22 kohm, which is a high-pass with no low-pass. The carrier
+therefore reaches the amplifier at full amplitude. A fast carrier sits far
+above the band the speaker can move, so little of that power becomes heat.
+
 `LEDR[8:0]` show `SW[8:0]`. `LEDR[9]` blinks once in 0.67 s from a clocked
 counter, so it shows that the clock reaches the logic.
+
+## Volume
+
+KEY0 raises the volume and KEY1 lowers it. HEX0 shows the level as a
+hexadecimal digit from 0 to F. The design starts at 8, which is a quarter of
+full-scale power.
+
+| volume | effect |
+|---|---|
+| 0 | silence |
+| 1 | quietly audible at every tone |
+| 8 | the loudest comfortable setting |
+| 15 | full scale; the amplifier clips and the speaker warms |
+
+A full-scale sine clips at this amplifier, because its gain of about 16 turns
+a 3.3 V rail into a rail-limited output. A clipped sine heats the voice coil,
+so the level that sounds pleasant is below the top of the range.
+
+Each key press counts once. A key must hold its new state for 2.6 ms before
+the design accepts it, which removes contact bounce.
 
 ## The audio pins
 
@@ -91,8 +117,8 @@ $Q/quartus_sta de0cv_sine
 $Q/quartus_pgm -m jtag -o "p;de0cv_sine.sof"
 ```
 
-The last build reported a setup slack of 16.0 ns against a 20 ns period, and
-a hold slack of 0.37 ns. It passes timing.
+The last build reported a setup slack of 12.4 ns against a 20 ns period, and
+a hold slack of 0.43 ns. It passes timing.
 
 ## The tone bench
 
@@ -107,7 +133,13 @@ verilator --cc --exe --build -O2 -Wno-fatal --top-module de0cv_sine_pwm \
 ./obj_sine/tb_sine 148
 ```
 
-The bench measured 441.03 Hz at `SW=148`, against a predicted 441.07 Hz.
+The bench holds both keys released, so the design runs at its power-up volume
+of 8. It measured 441.11 Hz at `SW=148` and 3049.45 Hz at `SW=1023`, each
+against a prediction within 0.7 Hz.
+
+The bench found two faults that the board would have shown as silence: the
+volume register powered up at zero, and the volume multiply was truncated to
+8 bits before the shift.
 
 ## Files
 

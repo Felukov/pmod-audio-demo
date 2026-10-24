@@ -11,6 +11,9 @@
 #
 # Both pins were found by measurement on the board. Every other GPIO_0 lane is
 # left unassigned, so the RFS card keeps sole ownership of its own signals.
+#
+# The switches select the tone frequency. KEY0 and KEY1 change the volume, and
+# HEX0 shows the level.
 
 set_global_assignment -name FAMILY "Cyclone V"
 set_global_assignment -name DEVICE 5CEBA4F23C7
@@ -33,6 +36,22 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to PMOD_AUDIO_L
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to PMOD_AUDIO_R
 set_instance_assignment -name CURRENT_STRENGTH_NEW "4MA" -to PMOD_AUDIO_L
 set_instance_assignment -name CURRENT_STRENGTH_NEW "4MA" -to PMOD_AUDIO_R
+
+# KEY0 raises the volume and KEY1 lowers it. Both are active low.
+set_location_assignment PIN_U7 -to KEY[0]
+set_location_assignment PIN_W9 -to KEY[1]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to KEY[1:0]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to KEY[1:0]
+
+# HEX0 shows the volume level.
+set_location_assignment PIN_U21  -to HEX0[0]
+set_location_assignment PIN_V21  -to HEX0[1]
+set_location_assignment PIN_W22  -to HEX0[2]
+set_location_assignment PIN_W21  -to HEX0[3]
+set_location_assignment PIN_Y22  -to HEX0[4]
+set_location_assignment PIN_Y21  -to HEX0[5]
+set_location_assignment PIN_AA22 -to HEX0[6]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to HEX0[*]
 
 # Ten slide switches select the tone frequency.
 set_location_assignment PIN_U13  -to SW[0]
