@@ -51,13 +51,13 @@ counter, so it shows that the clock reaches the logic.
 ## Volume
 
 KEY0 raises the volume and KEY1 lowers it. HEX0 shows the level as a
-hexadecimal digit from 0 to F. The design starts at 8, which is a quarter of
-full-scale power.
+hexadecimal digit from 0 to F. The design starts at 1, so a board that powers
+up cannot surprise the ears of someone wearing headphones.
 
 | volume | effect |
 |---|---|
 | 0 | silence |
-| 1 | quietly audible at every tone |
+| 1 | quietly audible at every tone; the power-up level |
 | 8 | the loudest comfortable setting |
 | 15 | full scale; the amplifier clips and the speaker warms |
 
@@ -134,8 +134,8 @@ verilator --cc --exe --build -O2 -Wno-fatal --top-module de0cv_sine_pwm \
 ```
 
 The bench holds both keys released, so the design runs at its power-up volume
-of 8. It measured 441.11 Hz at `SW=148` and 3049.45 Hz at `SW=1023`, each
-against a prediction within 0.7 Hz.
+of 1. It measured 441.13 Hz at `SW=148` and 3048.63 Hz at `SW=1023`, each
+against a prediction within 0.2 Hz.
 
 The bench found two faults that the board would have shown as silence: the
 volume register powered up at zero, and the volume multiply was truncated to

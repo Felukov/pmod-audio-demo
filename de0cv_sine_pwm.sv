@@ -32,12 +32,13 @@
 //   SW = 148     441 Hz, near the musical note A4
 //   SW = 1023   3049 Hz
 //
-// VOLUME runs from 0 to 15 and starts at 8. KEY0 raises it and KEY1 lowers
+// VOLUME runs from 0 to 15 and starts at 1. KEY0 raises it and KEY1 lowers
 // it. HEX0 shows the level as a hexadecimal digit.
 //
 // The volume scales the sample by VOLUME/16, so level 15 is close to full
-// scale and level 8 is a quarter of full-scale power. A full-scale sine
-// clips at the amplifier, and the clipped signal heats the voice coil.
+// scale and level 1 is quiet. A full-scale sine clips at the amplifier, and
+// the clipped signal heats the voice coil. The design starts at 1 so that a
+// board which powers up cannot surprise the ears of a headphone wearer.
 //
 // The two audio lanes reach the FPGA on these pins:
 //
@@ -77,8 +78,9 @@ module de0cv_sine_pwm (
     // before the design accepts it.
     localparam int DEBOUNCE_WIDTH = 17;
 
-    // The volume starts at half of its range.
-    localparam logic [3:0] VOLUME_START = 4'd8;
+    // The volume starts at its lowest audible level. A board that powers up
+    // cannot then surprise the ears of someone wearing headphones.
+    localparam logic [3:0] VOLUME_START = 4'd1;
 
     // The table holds one sine period. Entry k is 128 plus 127.5 times the
     // sine of k/256 turns, rounded to an integer. The range stays inside

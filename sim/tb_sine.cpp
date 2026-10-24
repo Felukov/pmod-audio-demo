@@ -29,8 +29,8 @@ int main(int argc, char **argv) {
     dut->KEY = 0xF;
 
     // The bench looks for the duty crossing its mid value. The design starts
-    // at volume 8 of 16, so the peak duty is half of full scale.
-    const int kMid = 64;
+    // at volume 1 of 16, so the peak duty is 254/16, which is 15 of 256.
+    const int kMid = 7;
 
     // One PWM period is 256 clock cycles.
     const int kPeriod = 256;
