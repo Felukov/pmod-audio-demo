@@ -1,52 +1,86 @@
-# Sine tone on a DE0-CV with the Pmod AUDIO
+# Repeating scale on a DE0-CV with the Pmod AUDIO
 
-This project makes a sine tone on the speaker of the Pmod AUDIO v1.2.
-The tone plays through the RFS daughter card, which supplies the socket.
+This project plays a rising musical scale on the speaker of the Pmod AUDIO
+v1.2. The tone plays through the RFS daughter card, which supplies the socket.
 The design is one SystemVerilog file.
 
 ## What the design does
 
-The switches choose the tone frequency. KEY0 and KEY1 choose the volume.
+The design holds a table of fifteen note values, from C4 to C6. A timer moves
+through the table, so the scale plays and then repeats. The switches set the
+tempo, and KEY0 and KEY1 set the volume.
+
 A pulse-width modulator drives the amplifier input. The amplifier removes the
 switching rate and reproduces the average level. That average level follows a
 256-entry sine table.
 
 ```
-SW[9:0] --> phase increment --> 24-bit phase --> sine table (256 entries)
-                                                     |
-                                                     v
-                                      8-bit sample, scaled by VOLUME
-                                                     |
-                                                     v
-                                 PWM against an 8-bit counter
-                                                     |
-                                                     v
-                                      PIN_T17 (left), PIN_T15 (right)
+NOTE_SW[note_index] --> phase increment --> 24-bit phase --> sine table
+                                                                  |
+                                                                  v
+                                                   8-bit sample, scaled
+                                                                  |
+                                                                  v
+                                             PWM against an 8-bit counter
+                                                                  |
+                                                                  v
+                                                   PIN_T17 and PIN_T15
 ```
+
+A second counter sets the note length. When it reaches its limit, the note
+index moves on, and after the last note it returns to the first.
 
 One PWM period is 256 clock cycles, so the carrier is 195.3 kHz.
 One sine sample is taken per period, so the sample rate is 195312.5 Hz.
-The tone frequency is:
+A note value of `n` gives this frequency:
 
 ```
-f = SW * 256 * 195312.5 / 2**24 = SW * 2.98023 Hz
+f = n * 256 * 195312.5 / 2**24 = n * 2.98023 Hz
 ```
 
-| SW | tone |
-|---|---|
-| 0 | silence |
-| 74 | 220.5 Hz |
-| 148 | 441.1 Hz, near A4 |
-| 400 | 1192 Hz |
-| 1023 | 3049 Hz |
+The note length in PWM periods, set by the switches, is:
+
+```
+length = 8192 + ((1023 - SW) << 7)
+```
+
+| SW | note length | tempo |
+|---|---|---|
+| 0 | 0.712 s | slow |
+| 512 | 0.377 s | medium |
+| 1023 | 0.042 s | fast |
 
 The reason for the fast carrier: the Pmod input network is a coupling
 capacitor into 22 kohm, which is a high-pass with no low-pass. The carrier
 therefore reaches the amplifier at full amplitude. A fast carrier sits far
 above the band the speaker can move, so little of that power becomes heat.
 
-`LEDR[8:0]` show `SW[8:0]`. `LEDR[9]` blinks once in 0.67 s from a clocked
-counter, so it shows that the clock reaches the logic.
+`LEDR[3:0]` show which note is playing. `LEDR[9]` blinks once in 0.67 s from a
+clocked counter, so it shows that the clock reaches the logic.
+
+## The notes
+
+| note | frequency | note value | actual |
+|---|---|---|---|
+| C4 | 261.63 Hz | 88 | 262.26 Hz |
+| D4 | 293.66 Hz | 99 | 295.04 Hz |
+| E4 | 329.63 Hz | 111 | 330.81 Hz |
+| F4 | 349.23 Hz | 117 | 348.69 Hz |
+| G4 | 392.00 Hz | 132 | 393.39 Hz |
+| A4 | 440.00 Hz | 148 | 441.07 Hz |
+| B4 | 493.88 Hz | 166 | 494.72 Hz |
+| C5 | 523.25 Hz | 176 | 524.52 Hz |
+| D5 | 587.33 Hz | 197 | 587.11 Hz |
+| E5 | 659.25 Hz | 221 | 658.63 Hz |
+| F5 | 698.46 Hz | 234 | 697.37 Hz |
+| G5 | 783.99 Hz | 263 | 783.80 Hz |
+| A5 | 880.00 Hz | 295 | 879.17 Hz |
+| B5 | 987.77 Hz | 331 | 986.46 Hz |
+| C6 | 1046.50 Hz | 351 | 1046.06 Hz |
+
+The note value is an integer, so each note is off by at most 1.9 Hz. The
+largest error is 0.35 per cent, which is below the point where most listeners
+hear a note as out of tune. A finer table would shrink it further.
 
 ## Volume
 
@@ -117,25 +151,30 @@ $Q/quartus_sta de0cv_sine
 $Q/quartus_pgm -m jtag -o "p;de0cv_sine.sof"
 ```
 
-The last build reported a setup slack of 12.4 ns against a 20 ns period, and
-a hold slack of 0.43 ns. It passes timing.
+The last build reported a setup slack of 12.8 ns against a 20 ns period, and
+a hold slack of 0.25 ns. It passes timing.
 
-## The tone bench
+## The note bench
 
-`sim/tb_sine.cpp` measures the tone that the design produces. It counts the
+`sim/tb_sine.cpp` measures the notes that the design produces. It counts the
 high cycles of each PWM period, which gives the duty. It then finds where the
-duty crosses its mid value, which gives the tone period.
+duty crosses its mid value, which gives the tone period of the note now
+playing. It reads the note index from the LED outputs, so it also reports the
+length of each note.
 
 ```sh
 cd sim
 verilator --cc --exe --build -O2 -Wno-fatal --top-module de0cv_sine_pwm \
     ../de0cv_sine_pwm.sv tb_sine.cpp -o tb_sine --Mdir obj_sine
-./obj_sine/tb_sine 148
+./obj_sine/tb_sine 1023
 ```
 
-The bench holds both keys released, so the design runs at its power-up volume
-of 1. It measured 441.13 Hz at `SW=148` and 3048.63 Hz at `SW=1023`, each
-against a prediction within 0.2 Hz.
+The argument is the switch value, which sets the tempo. The bench holds both
+keys released, so the design runs at its power-up volume of 1.
+
+At `SW=1023` it measured every note of the scale, with a pitch error below
+2 Hz and a note length of exactly 8192 PWM periods. At `SW=0` it measured a
+note length of exactly 139136 PWM periods, which is 0.712 s.
 
 The bench found two faults that the board would have shown as silence: the
 volume register powered up at zero, and the volume multiply was truncated to
@@ -146,7 +185,7 @@ volume register powered up at zero, and the volume multiply was truncated to
 | file | role |
 |---|---|
 | `de0cv_sine_pwm.sv` | the design |
-| `de0cv_sine.qsf` | device, the two audio pins, switches, LEDs |
+| `de0cv_sine.qsf` | device, the two audio pins, keys, switches, displays |
 | `de0cv_sine.sdc` | the 50 MHz clock |
 | `de0cv_sine.qpf` | the Quartus project |
-| `sim/tb_sine.cpp` | the bench that measures the tone |
+| `sim/tb_sine.cpp` | the bench that measures the notes and the tempo |

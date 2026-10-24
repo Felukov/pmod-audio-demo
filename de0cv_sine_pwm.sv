@@ -1,4 +1,4 @@
-// Sine tone for the Terasic Pmod AUDIO v1.2 on a DE0-CV board.
+// Repeating musical scale for the Terasic Pmod AUDIO v1.2 on a DE0-CV board.
 //
 // The Pmod holds a PAM8403 class-D amplifier. Its input is an analog level,
 // so this design drives it with a pulse-width modulated square wave. The
@@ -7,30 +7,35 @@
 //
 // Signal path:
 //
-//   SW[9:0] --> phase increment --> 24-bit phase --> sine table (256 entries)
-//                                                        |
-//                                                        v
-//                                      8-bit sample, scaled by VOLUME
-//                                                        |
-//                                                        v
-//                                   PWM compare against an 8-bit counter
-//                                                        |
-//                                                        v
-//                                             PIN_T17 and PIN_T15
+//   NOTE_SW[note_index] --> phase increment --> 24-bit phase --> sine table
+//                                                                  |
+//                                                                  v
+//                                                    8-bit sample, scaled
+//                                                                  |
+//                                                                  v
+//                                              PWM against an 8-bit counter
+//                                                                  |
+//                                                                  v
+//                                                    PIN_T17 and PIN_T15
 //
-// One PWM period is 2**8 = 256 clock cycles. The carrier is therefore
-// 50 MHz / 256 = 195.3 kHz. A high carrier keeps the switching power out of
-// the band the speaker can move, so that power does not become coil heat.
+// The design plays a rising scale of fifteen notes, from C4 to C6, and then
+// starts again at C4. Note k of the table holds the switch value that gives
+// that note, so the note frequency is NOTE_SW[k] times 2.98023 Hz.
 //
-// One sine sample is taken per PWM period, so the sample rate is 195312.5 Hz.
-// The phase accumulator is 24 bits wide. The increment is SW shifted left by
-// 8, so the tone frequency is:
+// One PWM period is 2**8 = 256 clock cycles, so the carrier is 195.3 kHz and
+// one sine sample is taken per period. The sample rate is therefore 195312.5
+// Hz. The increment is the note value shifted left by 8, so the tone is:
 //
-//   f = SW * 256 * 195312.5 / 2**24 = SW * 2.98023 Hz
+//   f = note * 256 * 195312.5 / 2**24 = note * 2.98023 Hz
 //
-//   SW = 0       silence, because the increment is zero
-//   SW = 148     441 Hz, near the musical note A4
-//   SW = 1023   3049 Hz
+// The switches set the tempo. The note length in PWM periods is:
+//
+//   length = 8192 + ((1023 - SW) << 7)
+//
+//   SW = 0      0.71 s for each note
+//   SW = 1023   0.04 s for each note
+//
+// A higher switch value plays faster.
 //
 // VOLUME runs from 0 to 15 and starts at 1. KEY0 raises it and KEY1 lowers
 // it. HEX0 shows the level as a hexadecimal digit.
@@ -49,8 +54,8 @@
 // schematic. The RFS header mirrors each row against the DE0-CV header, so a
 // net name in the RFS schematic does not give the GPIO lane by itself.
 //
-// LEDR[9] blinks once in 0.67 s from a clocked counter, so it shows that the
-// clock reaches the logic. LEDR[8:0] show SW[8:0].
+// LEDR[3:0] show the note index. LEDR[9] blinks once in 0.67 s from a clocked
+// counter, so it shows that the clock reaches the logic.
 
 module de0cv_sine_pwm (
     input  logic       CLOCK_50,
@@ -78,9 +83,15 @@ module de0cv_sine_pwm (
     // before the design accepts it.
     localparam int DEBOUNCE_WIDTH = 17;
 
-    // The volume starts at its lowest audible level. A board that powers up
-    // cannot then surprise the ears of someone wearing headphones.
+    // The note clock counts PWM periods. Its longest count is 139136, so 18
+    // bits hold it.
+    localparam int NOTE_TIMER_WIDTH = 18;
+
+    // The volume starts at its lowest audible level.
     localparam logic [3:0] VOLUME_START = 4'd1;
+
+    // The scale has fifteen notes.
+    localparam int NOTE_COUNT = 15;
 
     // The table holds one sine period. Entry k is 128 plus 127.5 times the
     // sine of k/256 turns, rounded to an integer. The range stays inside
@@ -120,6 +131,14 @@ module de0cv_sine_pwm (
         8'd103, 8'd106, 8'd109, 8'd112, 8'd115, 8'd118, 8'd121, 8'd124
     };
 
+    // Entry k holds the switch value for note k. The scale runs from C4 to
+    // C6 in the key of C.
+    localparam logic [9:0] NOTE_SW [0:14] = '{
+        10'd88, 10'd99, 10'd111, 10'd117, 10'd132,
+        10'd148, 10'd166, 10'd176, 10'd197, 10'd221,
+        10'd234, 10'd263, 10'd295, 10'd331, 10'd351
+    };
+
     logic [PWM_WIDTH-1:0]       pwm_count;
     logic [PHASE_WIDTH-1:0]     phase;
     logic [7:0]                 sample;
@@ -127,29 +146,35 @@ module de0cv_sine_pwm (
     logic                       pwm_out;
     logic [HEARTBEAT_WIDTH-1:0] heartbeat;
 
-    // The volume holds its start value when the device powers up, so the tone
-    // plays without a key press.
+    logic [3:0]                 note_index;
+    logic [NOTE_TIMER_WIDTH-1:0] note_timer;
+    logic [NOTE_TIMER_WIDTH-1:0] note_length;
+
     logic [3:0]                 volume = VOLUME_START;
     logic [1:0]                 key_state;
     logic [1:0]                 key_sample;
     logic [DEBOUNCE_WIDTH-1:0]  key_timer;
 
-    // The increment is SW shifted left by 8, so no multiplier is needed.
-    logic [PHASE_WIDTH-1:0] increment;
+    // The increment is the note value shifted left by 8, so no multiplier is
+    // needed.
+    logic [9:0]                 note_value;
+    logic [PHASE_WIDTH-1:0]     increment;
 
-    assign increment = {6'b000000, SW, 8'b00000000};
-
-    // The volume scales the sine sample by VOLUME/16. A sample of 128 with a
-    // volume of 8 gives a duty of 64 of 256, a quarter of full scale.
-    //
     // The product needs 12 bits: the largest sample is 254 and the largest
     // volume is 15, so the product is at most 3810. Without those 12 bits the
     // multiply would be truncated to 8 bits before the shift.
-    logic [11:0] scaled_product;
+    logic [11:0]                scaled_product;
+
+    assign note_value = NOTE_SW[note_index];
+    assign increment  = {6'b000000, note_value, 8'b00000000};
+
+    // A higher switch value shortens the note, so the scale plays faster.
+    assign note_length = 18'd8192 + ((10'd1023 - SW) << 7);
 
     assign scaled_product = sample * volume;
     assign scaled = scaled_product[11:4];
 
+    // The PWM counter and the phase accumulator run every clock.
     always_ff @(posedge CLOCK_50) begin
         pwm_count <= pwm_count + 1'b1;
         pwm_out   <= (pwm_count < scaled);
@@ -160,6 +185,20 @@ module de0cv_sine_pwm (
         if (pwm_count == '0) begin
             phase  <= phase + increment;
             sample <= SINE[phase[PHASE_WIDTH-1 -: TABLE_INDEX_WIDTH]];
+        end
+    end
+
+    // The note clock counts PWM periods. When a note ends, the design moves
+    // to the next note, and after the last note it returns to the first.
+    always_ff @(posedge CLOCK_50) begin
+        if (pwm_count == '0) begin
+            if (note_timer + 1'b1 >= note_length) begin
+                note_timer <= '0;
+                note_index <= (note_index + 1'b1 == NOTE_COUNT) ? 4'd0
+                                                                : note_index + 1'b1;
+            end else begin
+                note_timer <= note_timer + 1'b1;
+            end
         end
     end
 
@@ -215,6 +254,7 @@ module de0cv_sine_pwm (
     assign PMOD_AUDIO_L = pwm_out;
     assign PMOD_AUDIO_R = pwm_out;
 
-    assign LEDR = {heartbeat[HEARTBEAT_WIDTH-1], SW[8:0]};
+    // LEDR[3:0] show the note index. LEDR[9] is the clocked heartbeat.
+    assign LEDR = {heartbeat[HEARTBEAT_WIDTH-1], 5'b00000, note_index};
 
 endmodule
