@@ -72,11 +72,12 @@ module de0cv_sine_pwm (
     // bits hold it.
     localparam int NOTE_TIMER_WIDTH = 18;
 
+    // The scale has fifteen notes, so four bits hold the index and its limit.
+    localparam logic [3:0] NOTE_COUNT = 4'd15;
+
     // The volume starts at its lowest audible level.
     localparam logic [3:0] VOLUME_START = 4'd1;
 
-    // The scale has fifteen notes.
-    localparam int NOTE_COUNT = 15;
 
     // The table holds one sine period. Entry k is 128 plus 127.5 times the
     // sine of k/256 turns, rounded to an integer. The range stays inside
@@ -153,8 +154,9 @@ module de0cv_sine_pwm (
     assign note_value = NOTE_SW[note_index];
     assign increment  = {6'b000000, note_value, 8'b00000000};
 
-    // A higher switch value shortens the note, so the scale plays faster.
-    assign note_length = 18'd8192 + ((10'd1023 - SW) << 7);
+    // A higher switch value shortens the note, so the scale plays faster. Each
+    // operand carries its own width, so the sum needs no widening.
+    assign note_length = 18'd8192 + ((18'(10'd1023) - 18'(SW)) << 7);
 
     assign scaled_product = sample * volume;
     assign scaled = scaled_product[11:4];
@@ -179,8 +181,8 @@ module de0cv_sine_pwm (
         if (pwm_count == '0) begin
             if (note_timer + 1'b1 >= note_length) begin
                 note_timer <= '0;
-                note_index <= (note_index + 1'b1 == NOTE_COUNT) ? 4'd0
-                                                                : note_index + 1'b1;
+                note_index <= (note_index + 4'd1 == NOTE_COUNT) ? 4'd0
+                                                                : note_index + 4'd1;
             end else begin
                 note_timer <= note_timer + 1'b1;
             end
