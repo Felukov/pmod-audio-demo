@@ -1,0 +1,61 @@
+# Quartus assignments for the sine tone on a DE0-CV board.
+#
+# Device: Cyclone V 5CEBA4F23C7, the part fitted to the DE0-CV.
+#
+# The audio leaves the board on two pins of the GPIO_0 expansion header. The
+# RFS daughter card sits in that header, and the Pmod AUDIO sits in the RFS 2x6
+# TMD socket. These two pins drive the amplifier:
+#
+#   PIN_T17, GPIO_0 lane 34, left channel
+#   PIN_T15, GPIO_0 lane 35, right channel
+#
+# Both pins were found by measurement on the board. Every other GPIO_0 lane is
+# left unassigned, so the RFS card keeps sole ownership of its own signals.
+
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CEBA4F23C7
+set_global_assignment -name TOP_LEVEL_ENTITY de0cv_sine_pwm
+set_global_assignment -name VERILOG_INPUT_VERSION SystemVerilog_2005
+
+set_global_assignment -name SYSTEMVERILOG_FILE de0cv_sine_pwm.sv
+set_global_assignment -name SDC_FILE de0cv_sine.sdc
+
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+
+# The 50 MHz oscillator feeds the design. No phase-locked loop is used.
+set_location_assignment PIN_M9 -to CLOCK_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to CLOCK_50
+
+# Left and right audio lanes.
+set_location_assignment PIN_T17 -to PMOD_AUDIO_L
+set_location_assignment PIN_T15 -to PMOD_AUDIO_R
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to PMOD_AUDIO_L
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to PMOD_AUDIO_R
+set_instance_assignment -name CURRENT_STRENGTH_NEW "4MA" -to PMOD_AUDIO_L
+set_instance_assignment -name CURRENT_STRENGTH_NEW "4MA" -to PMOD_AUDIO_R
+
+# Ten slide switches select the tone frequency.
+set_location_assignment PIN_U13  -to SW[0]
+set_location_assignment PIN_V13  -to SW[1]
+set_location_assignment PIN_T13  -to SW[2]
+set_location_assignment PIN_T12  -to SW[3]
+set_location_assignment PIN_AA15 -to SW[4]
+set_location_assignment PIN_AB15 -to SW[5]
+set_location_assignment PIN_AA14 -to SW[6]
+set_location_assignment PIN_AA13 -to SW[7]
+set_location_assignment PIN_AB13 -to SW[8]
+set_location_assignment PIN_AB12 -to SW[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to SW[*]
+
+# Ten red LEDs. LEDR[9] is the clocked heartbeat.
+set_location_assignment PIN_AA2 -to LEDR[0]
+set_location_assignment PIN_AA1 -to LEDR[1]
+set_location_assignment PIN_W2  -to LEDR[2]
+set_location_assignment PIN_Y3  -to LEDR[3]
+set_location_assignment PIN_N2  -to LEDR[4]
+set_location_assignment PIN_N1  -to LEDR[5]
+set_location_assignment PIN_U2  -to LEDR[6]
+set_location_assignment PIN_U1  -to LEDR[7]
+set_location_assignment PIN_L2  -to LEDR[8]
+set_location_assignment PIN_L1  -to LEDR[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LEDR[*]
