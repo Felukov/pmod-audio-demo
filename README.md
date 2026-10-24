@@ -140,10 +140,11 @@ ln -sfn /usr/lib64/libnsl.so.3 quartus-libs/libnsl.so.1
 export LD_LIBRARY_PATH=$PWD/quartus-libs
 ```
 
-Then run the four stages and program the board:
+Then run the four stages and program the board. Set `Q` to the `bin` directory
+of your Quartus installation:
 
 ```sh
-Q=/home/fila/intelFPGA_lite/18.1/quartus/bin
+Q=/opt/intelFPGA_lite/18.1/quartus/bin   # your installation path
 $Q/quartus_map de0cv_sine
 $Q/quartus_fit de0cv_sine
 $Q/quartus_asm de0cv_sine
