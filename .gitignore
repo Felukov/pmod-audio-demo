@@ -12,10 +12,6 @@ output_files/
 *.qws
 c5_pin_model_dump.txt
 
-# The libnsl link that Quartus 18.1 needs. It points at a system library, so
-# the README shows how to make it instead of storing it.
-quartus-libs/
-
 # Simulation build output.
 sim/obj_sine/
 sim/tb_sine

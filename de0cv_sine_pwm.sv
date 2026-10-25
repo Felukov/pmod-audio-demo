@@ -1,46 +1,35 @@
 // Repeating musical scale for the Pmod AUDIO v1.2 on a DE0-CV board.
 //
 // The Pmod holds a PAM8403 class-D amplifier. Its input is an analog level, so
-// this design drives it with a pulse-width modulated square wave. The
-// amplifier removes the switching rate, and the speaker receives the average
-// level of each PWM period.
+// this design drives it with a pulse-width modulated square wave.
 //
 // Signal path:
 //
-//   NOTE_SW[note_index] --> phase increment --> 24-bit phase --> sine table
+//   NOTE_SW[note_index] --> phase increment --> phase accumulator
 //                                                                  |
 //                                                                  v
-//                                                    8-bit sample, scaled
+//                                                       sample, scaled
 //                                                                  |
 //                                                                  v
-//                                              PWM against an 8-bit counter
+//                                                    PWM against a counter
 //                                                                  |
 //                                                                  v
 //                                                    PIN_T17 and PIN_T15
 //
-// Note k of NOTE_SW holds the switch value that gives note k. The design plays
-// a rising scale of fifteen notes, from C4 to C6, and then starts again at C4.
-// The switches set the tempo, and a higher switch value plays faster.
+// The design plays a rising scale of fifteen notes, from C4 to C6, and then
+// starts again at C4. The switches set the note length.
 //
-// VOLUME runs from 0 to 15 and starts at 1. The volume scales the sample by
-// VOLUME/16. KEY0 raises the level and KEY1 lowers it, and HEX0 shows it. A
-// full-scale sine clips at the amplifier, and the clipped signal heats the
-// voice coil. The design starts at 1 so that a board which powers up cannot
-// surprise the ears of a headphone wearer.
+// VOLUME scales the sample. KEY0 raises the level and KEY1 lowers it, and HEX0
+// shows it.
 //
 // The two audio lanes reach the FPGA on these pins:
 //
 //   left  channel: PIN_T17, GPIO_0 lane 34
 //   right channel: PIN_T15, GPIO_0 lane 35
 //
-// These two pins were found by measurement on the board, not from the
-// schematic. The RFS header mirrors each row against the DE0-CV header, so a
-// net name in the RFS schematic does not give the GPIO lane by itself. Both
-// lanes are driven together, because a class-D amplifier with one input
-// floating gives no sound.
+// Both lanes are driven together.
 //
-// LEDR[3:0] show the note index. LEDR[9] blinks once in 0.67 s from a clocked
-// counter, so it shows that the clock reaches the logic.
+// LEDR[3:0] show the note index.
 
 module de0cv_sine_pwm (
     input  logic       CLOCK_50,
@@ -52,36 +41,30 @@ module de0cv_sine_pwm (
     output logic       PMOD_AUDIO_R
 );
 
-    // One PWM period is 2**8 = 256 clock cycles.
+    // One PWM period is 2**PWM_WIDTH clock cycles.
     localparam int PWM_WIDTH = 8;
 
-    // The phase accumulator is 24 bits wide.
     localparam int PHASE_WIDTH = 24;
 
-    // The table has 2**8 = 256 entries.
+    // The table has 2**TABLE_INDEX_WIDTH entries.
     localparam int TABLE_INDEX_WIDTH = 8;
 
-    // The heartbeat divides 50 MHz down to 0.75 Hz.
     localparam int HEARTBEAT_WIDTH = 26;
 
-    // A key must hold its new state for 2**17 clock cycles, which is 2.6 ms,
-    // before the design accepts it.
+    // A key must hold its new state for 2**DEBOUNCE_WIDTH clock cycles before
+    // the design accepts it.
     localparam int DEBOUNCE_WIDTH = 17;
 
-    // The note clock counts PWM periods. Its longest count is 139136, so 18
-    // bits hold it.
     localparam int NOTE_TIMER_WIDTH = 18;
 
-    // The scale has fifteen notes, so four bits hold the index and its limit.
     localparam logic [3:0] NOTE_COUNT = 4'd15;
 
-    // The volume starts at its lowest audible level.
+    // The volume starts at 1.
     localparam logic [3:0] VOLUME_START = 4'd1;
 
 
-    // The table holds one sine period. Entry k is 128 plus 127.5 times the
-    // sine of k/256 turns, rounded to an integer. The range stays inside
-    // 1..254, so the duty is never 0 per cent or 100 per cent.
+    // The table holds one sine period. No value reaches 0 or 255, so the duty
+    // stays between 0 and 100 per cent.
     localparam logic [7:0] SINE [0:255] = '{
         8'd128, 8'd131, 8'd134, 8'd137, 8'd140, 8'd143, 8'd146, 8'd149,
         8'd152, 8'd155, 8'd158, 8'd162, 8'd165, 8'd167, 8'd170, 8'd173,
@@ -117,8 +100,7 @@ module de0cv_sine_pwm (
         8'd103, 8'd106, 8'd109, 8'd112, 8'd115, 8'd118, 8'd121, 8'd124
     };
 
-    // Entry k holds the switch value for note k. The scale runs from C4 to
-    // C6 in the key of C.
+    // The scale runs from C4 to C6 in the key of C.
     localparam logic [9:0] NOTE_SW [0:14] = '{
         10'd88, 10'd99, 10'd111, 10'd117, 10'd132,
         10'd148, 10'd166, 10'd176, 10'd197, 10'd221,
@@ -141,14 +123,11 @@ module de0cv_sine_pwm (
     logic [1:0]                 key_sample;
     logic [DEBOUNCE_WIDTH-1:0]  key_timer;
 
-    // The increment is the note value shifted left by 8, so no multiplier is
-    // needed.
+    // The increment is the note value shifted left by TABLE_INDEX_WIDTH, so no
+    // multiplier is needed.
     logic [9:0]                 note_value;
     logic [PHASE_WIDTH-1:0]     increment;
 
-    // The product needs 12 bits: the largest sample is 254 and the largest
-    // volume is 15, so the product is at most 3810. Without those 12 bits the
-    // multiply would be truncated to 8 bits before the shift.
     logic [11:0]                scaled_product;
 
     assign note_value = NOTE_SW[note_index];

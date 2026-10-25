@@ -1,10 +1,9 @@
 // Measures the notes that the design produces.
 //
-// The design outputs a pulse-width modulated square wave. One PWM period is
-// 256 clock cycles. This bench counts the high cycles inside each period,
-// which gives the duty that the amplifier receives as an average level. The
-// duty sequence is the sine. The bench then finds where the duty crosses its
-// mid value, which gives one tone period in clock cycles.
+// The design outputs a pulse-width modulated square wave. This bench counts the
+// high cycles inside each period, which gives the duty. The duty sequence is
+// the sine. The bench then finds where the duty crosses its mid value, which
+// gives one tone period in clock cycles.
 //
 // The design plays a scale, so the bench reports the frequency of each note
 // and the length of each note. The length comes from the note index on the
@@ -21,7 +20,7 @@
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
 
-    // The switch value sets the tempo.
+    // The switch value sets the note length.
     const int switchValue = argc > 1 ? atoi(argv[1]) : 1023;
 
     Vde0cv_sine_pwm *dut = new Vde0cv_sine_pwm;
@@ -31,11 +30,9 @@ int main(int argc, char **argv) {
     // Both keys are released, which reads high on this board.
     dut->KEY = 0xF;
 
-    // One PWM period is 256 clock cycles.
     const int kPeriod = 256;
 
-    // The design starts at volume 1 of 16, so the peak duty is 254/16, which
-    // is 15 of 256. The bench looks for a crossing at half of that.
+    // The bench looks for a crossing at half the peak duty.
     const int kMid = 7;
 
     // The scale has fifteen notes. The bench runs three passes so that the
@@ -54,8 +51,7 @@ int main(int argc, char **argv) {
     std::vector<double> noteHz(kNotes, 0.0);
     std::vector<long>   noteLength(kNotes, 0);
 
-    // The longest note is 139136 PWM periods, so three passes of the scale
-    // need fewer than 6.3 million periods.
+    // Three passes of the scale give every note a frequency and a length.
     const long maxPeriods = 3L * kNotes * 140000L;
 
     while (periods < maxPeriods) {
@@ -109,7 +105,7 @@ int main(int argc, char **argv) {
     // The note length for this switch value, from the design.
     const long expected = 8192L + ((1023L - switchValue) << 7);
 
-    printf("SW (tempo) = %d\n", switchValue);
+    printf("SW (note length) = %d\n", switchValue);
     printf("expected note length = %ld PWM periods (%.3f s)\n",
            expected, double(expected) / 195312.5);
 
